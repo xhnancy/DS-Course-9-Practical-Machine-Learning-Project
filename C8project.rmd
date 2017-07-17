@@ -1,0 +1,127 @@
+---
+title: "C8project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Practical Machine Learning Course Project
+
+Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).   
+
+Data  
+
+The training data for this project are available here:   https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv  
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv  
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.  
+
+Goal  
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.  
+
+## Initialization  
+
+```{r , results='hide'}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+```
+
+## Get the data,  Read in the training and testing dataset  
+```{r}
+set.seed(123)
+trainUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"  
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))  
+```
+## Data preparation and cleaning
+Partion the training dataset into 2  
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+myTraining <- training[inTrain, ]
+myTesting <- training[-inTrain, ]
+dim(myTraining)
+dim(myTesting)
+```
+
+####Remove the first few columns of the data  
+####such as subject identifications, non movement activities related informations  
+```{r}
+myTraining <- myTraining[-c(1:5)]
+myTesting <- myTesting[-c(1:5)]
+```
+
+####Identify near zero variance predictors and remove the near zero variance   predictors 
+
+```{r}
+near0 <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,near0$nzv==FALSE]
+```
+
+####Remove columns with more than 95% NA values  
+```{r}
+MostNA  <- sapply(myTraining, function(x) mean(is.na(x))) > 0.95
+myTraining <- myTraining[, MostNA==FALSE]
+clnames <- colnames(myTraining)
+myTesting <- myTesting[,clnames]
+``` 
+##Model building
+```{r}
+set.seed(123)
+```
+####Set up for Cross validation, using 10 fold validation  
+```{r}
+control <- trainControl(method='cv', number = 10)
+```
+Build model using Decision tree, Random Forest and Stochastic gradient boosting trees (gbm)  
+Decision Tree
+```{r, results='hide'}
+myfit1 <- train(classe ~ ., data=myTraining,method='rpart',trControl=control)
+```
+Random forest 
+```{r, results='hide'}
+myfit2 <- train(classe ~ ., data=myTraining,method='rf',ntree=50,trControl=control)
+```
+Stochastic gradient boosting trees (gbm)
+```{r, results='hide'}
+myfit3 <- train(classe ~ ., data=myTraining,method='gbm',trControl=control)
+```
+Model Assesment
+```{r}
+pred1 <- predict(myfit1, newdata=myTesting)
+cmatrix1 <- confusionMatrix(pred1, myTesting$classe)
+pred2 <- predict(myfit2, newdata=myTesting)
+cmatrix2 <- confusionMatrix(pred2, myTesting$classe)
+pred3 <- predict(myfit3, newdata=myTesting)
+cmatrix3 <- confusionMatrix(pred3, myTesting$classe)
+
+Accuracy <- data.frame(
+  Model = c('DT', 'RF', 'GBM'),
+  Accuracy = rbind(cmatrix1$overall[1], cmatrix2$overall[1],cmatrix3$overall[1])
+)
+Accuracy
+```
+The random forest model has the highest accuracy rate, as 0.9971   
+## Prediction with test dataset
+```{r}
+model.predict <- predict(myfit2, testing)
+```
+
+##Result  
+The confusion matrics shows Randone forest is the best model, It's prediction accuracy is 0.9971. The out of sample error estimation is 2.9%. The following are the most important variables are listed below. 
+```{r}
+varImp(myfit2)
+```
+
+
